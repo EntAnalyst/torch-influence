@@ -237,8 +237,31 @@ class LiSSAInfluenceModule(BaseInfluenceModule):
         self.scale = scale
         self.debug_callback = debug_callback
 
-    def inverse_hvp(self, vec):
+    
+    def _estimate_largest_eigenvalue(self, max_iter=100, tol=1e-4):
+        # Implement power iteration method
+        v = torch.randn(self.model.num_params, device=self.device)
+        v = v / torch.norm(v)
 
+        for _ in range(max_iter):
+            v_new = self.hvp(v)
+            lambda_est = torch.dot(v_new, v) / torch.dot(v, v)
+            v_new = v_new / torch.norm(v_new)
+
+            if torch.norm(v_new - v) < tol:
+                break
+
+            v = v_new
+
+        return lambda_est.item()
+        
+    def inverse_hvp(self, vec):
+        if self.scale is None:
+            # Estimate the largest eigenvalue
+            lambda_max_est = self._estimate_largest_eigenvalue()
+            # Set scale based on the estimate with a safety margin
+            self.scale = lambda_max_est * 1.1 
+        
         params = self._model_make_functional()
         flat_params = self._flatten_params_like(params)
 
